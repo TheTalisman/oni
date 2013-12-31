@@ -1,3 +1,4 @@
+__Build/*
 bin/*
 obj/
 dist/*
