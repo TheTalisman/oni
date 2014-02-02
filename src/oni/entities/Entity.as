@@ -6,6 +6,7 @@ package oni.entities
 	import oni.core.ISerializable;
 	import oni.entities.debug.DebugCircle;
 	import oni.entities.debug.DebugSquare;
+	import oni.entities.environment.FluidBody;
 	import oni.entities.environment.StaticTexture;
 	import oni.entities.environment.SmartTexture;
 	import oni.entities.lights.AmbientLight;
@@ -20,6 +21,7 @@ package oni.entities
 	import flash.display.Scene;
 	import flash.geom.Rectangle;
 	import starling.core.RenderSupport;
+	import starling.core.Starling;
 	import starling.display.DisplayObject;
 	import starling.display.Shape;
 	import starling.events.Event;
@@ -51,6 +53,11 @@ package oni.entities
 		public var cull:Boolean = true;
 		
 		/**
+		 * The parameters used when the entity is initialised
+		 */
+		protected var _params:Object;
+		
+		/**
 		 * The entity's Z co-ordinate
 		 */
 		private var _z:Number = 1;
@@ -79,11 +86,6 @@ package oni.entities
 		 * The shape for displaying the entity's bounds
 		 */
 		private var _boundsShape:Shape;
-		
-		/**
-		 * The parameters used when the entity is initialised
-		 */
-		private var _params:Object;
 		
 		/**
 		 * Initialises an entity instance
@@ -264,7 +266,8 @@ package oni.entities
 		 */
 		public function serialize():Object
 		{
-			return {
+			//Get base data
+			var data:Object = {
 				className: getQualifiedClassName(this),
 				x: this.x,
 				y: this.y,
@@ -280,6 +283,13 @@ package oni.entities
 				height: this.height,
 				params: _params
 			};
+			
+			//Check if we should always match stage dimensions
+			if (data.width == Starling.current.stage.stageWidth) data.width = "stageWidth";
+			if (data.height == Starling.current.stage.stageHeight) data.height = "stageHeight";
+			
+			//Return data
+			return data;
 		}
 		
 		/**
@@ -301,6 +311,7 @@ package oni.entities
 		
 		private static function _applyEntityData(data:Object, entity:Entity):void
 		{
+			//Set basic properties
 			if(data.x != null) entity.x = data.x;
 			if(data.y != null) entity.y = data.y;
 			if(data.z != null) entity.z = data.z;
@@ -311,8 +322,16 @@ package oni.entities
 			if(data.cull != null) entity.cull = data.cull;
 			if(data.scrollX != null) entity.scrollX = data.scrollX;
 			if(data.scrollY != null) entity.scrollY = data.scrollY;
+			
+			if(data.width == "stageWidth") data.width = Starling.current.stage.stageWidth;
+			if(data.height == "stageHeight") data.height = Starling.current.stage.stageHeight;
+			
 			if(data.width != null) entity.width = data.width;
-			if(data.height != null) entity.height = data.height;
+			if (data.height != null) entity.height = data.height;
+			
+			//Check if startup params contains anything we don't need
+			if (data.x != null) delete(data.x);
+			if (data.y != null) delete(data.y);
 		}
 	}
 

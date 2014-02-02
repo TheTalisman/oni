@@ -17,22 +17,37 @@ package oni.screens
 		protected var _oni:Oni;
 		
 		/**
+		 * Whether the screen is an overlay or not
+		 */
+		protected var _overlay:Boolean;
+		
+		/**
 		 * A base class for all types of screens
 		 * @param	name
 		 */
-		public function Screen(oni:Oni, name:String) 
+		public function Screen(oni:Oni, name:String, overlay:Boolean=false) 
 		{
 			//Set the name
 			this.name = name;
+			
+			//Set overlay
+			this._overlay = overlay;
 			
 			//Set oni instance
 			_oni = oni;
 		}
 		
-		public function remove():void
+		public function remove(nextScreen:Screen=null):void
 		{
-			//Remove from parent
-			_oni.removeChild(this);
+			//Check if the screen has a parent
+			if (_oni.contains(this))
+			{
+				//Remove from parent
+				_oni.removeChild(this);
+				
+				//Dispatch removed event
+				dispatchEventWith(Oni.SCREEN_REMOVED, false, { nextScreen: nextScreen });
+			}
 		}
 		
 		public function get components():ComponentManager
@@ -43,6 +58,11 @@ package oni.screens
 		public function get oni():Oni
 		{
 			return _oni;
+		}
+		
+		public function get overlay():Boolean
+		{
+			return _overlay;
 		}
 		
 	}

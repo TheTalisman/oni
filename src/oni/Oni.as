@@ -27,19 +27,24 @@ package oni
 	public class Oni extends Sprite
 	{
 		/**
+		 * Event fired when the current level has been completed
+		 */
+		public static const LEVEL_COMPLETED:String = "level_complete";
+		
+		/**
+		 * Event fired when the current level has been failed
+		 */
+		public static const LEVEL_FAILED:String = "level_fail";
+		
+		/**
+		 * Event fired when a level should be loaded
+		 */
+		public static const LEVEL_LOAD:String = "level_load";
+		
+		/**
 		 * Event fired when there is a physics interaction
 		 */
 		public static const PHYSICS_INTERACTION:String = "physicsinteraction";
-		
-		/**
-		 * Event fired when debug mode is enabled
-		 */
-		public static const ENABLE_DEBUG:String = "enabledebug";
-		
-		/**
-		 * Event fired when debug mode is diabled
-		 */
-		public static const DISABLE_DEBUG:String = "disabledebug";
 		
 		/**
 		 * Event fired when data should be updated
