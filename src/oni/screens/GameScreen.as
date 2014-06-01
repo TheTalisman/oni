@@ -74,17 +74,12 @@ package oni.screens
 			//Check if we already have a scene
 			if (_scene != null)
 			{
-				//Dispose
-				_scene.dispose();
-				components.remove(_scene);
-				removeChild(_scene);
+				//Remove and dispose
+				removeChild(_scene, true);
 			}
 			
 			//Create a scene instance
 			_scene = value;
-			
-			//Add to components
-			components.add(_scene);
 			
 			//Add to display list
 			addChildAt(_scene, 0);
@@ -109,11 +104,19 @@ package oni.screens
 			//Dispose of scene
 			if (scene != null)
 			{
-				scene.dispose();
-				components.remove(scene);
-				if (contains(scene)) removeChild(scene);
-				scene = null;
+				//Remove and dispose
+				if (contains(scene)) removeChild(scene, true);
+				_scene = null;
 			}
+		}
+		
+		public function serialize():Object
+		{
+			//Check if we have a scene to serialize
+			if (scene == null) return null;
+			
+			//Return scene serialized with entities and components
+			return scene.serialize(entities, components);
 		}
 		
 		/**

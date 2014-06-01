@@ -9,13 +9,26 @@ package oni.components
 	 */
 	public class Camera extends EventDispatcher
 	{
+		/**
+		 * The camera shake event
+		 */
+		public static const SHAKE:String = "shake";
+		
 		public var smoothing:Number = 0.25;
 		
-		public var limit:Boolean = true;
+		/**
+		 * The intensity of the shake
+		 */
+		private var _shakeIntensity:Number;
 		
-		private var _x:int, _holdX:int;
+		/**
+		 * The decay of the shake
+		 */
+		private var _shakeDecay:Number;
 		
-		private var _y:int, _holdY:int;
+		private var _x:int, _holdX:int, _tempX:int;
+		
+		private var _y:int, _holdY:int, _tempY:int;
 		
 		private var _z:Number, _holdZ:Number;
 		
@@ -28,12 +41,15 @@ package oni.components
 			
 			//Listen for update
 			addEventListener(Oni.UPDATE, _onUpdate);
+			
+			//Listen for shake events
+			addEventListener(Camera.SHAKE, _onShake);
 		}
 		
 		private function _onUpdate(e:Event):void
 		{
 			//Check if we should move
-			if (_holdX != -1 || _holdY != -1 || _holdZ != -1)
+			if (_holdX != -1 || _holdY != -1 || _holdZ != -1 || _shakeIntensity > 0)
 			{
 				//Linear interpolate X
 				if (_holdX != -1)
@@ -43,9 +59,6 @@ package oni.components
 					
 					//Check if we should reset
 					if (_x == _holdX) _holdX = -1;
-					
-					//Limit
-					if (limit && _x < 0) _x = 0;
 				}
 				
 				//Linear interpolate Y
@@ -56,9 +69,6 @@ package oni.components
 					
 					//Check if we should reset
 					if (_y == _holdY) _holdY = -1;
-					
-					//Limit
-					if (limit && _y < 0) _y = 0;
 				}
 				
 				//Linear interpolate Z
@@ -74,10 +84,43 @@ package oni.components
 					if (_z < 0.25) _z = 0.25;
 				}
 				
+				//Do shake
+				if (_shakeIntensity > 0)
+				{
+					//Decrement intensity
+					_shakeIntensity -= _shakeDecay;
+					
+					//Have we stopped shaking?
+					if (_shakeIntensity <= 0)
+					{
+						//Reset variables
+						_shakeIntensity = _shakeDecay = 0;
+						
+						//Reset x/y
+						_holdX = _tempX;
+						_holdY = _tempY;
+						_tempX = _tempY = 0;
+					}
+					else
+					{
+						//Decrement intensity
+						_shakeIntensity /= _shakeDecay;
+						
+						//Actually shake the container
+						_x += _randomRange(-_shakeIntensity, _shakeIntensity);
+						//_y += _randomRange(-_shakeIntensity, _shakeIntensity);
+					}
+				}
+				
 				//Dispatch event
 				dispatchEventWith(Oni.UPDATE_POSITION, false, { x:_x, y:_y, z:_z } );
 			}
 		}
+		
+		private function _randomRange(min:Number, max:Number):Number
+		{
+            return (min + Math.random() * (max - min));
+        }
 		
 		public function get x():int
 		{
@@ -107,6 +150,40 @@ package oni.components
 		public function set z(value:Number):void
 		{
 			if(value != _holdZ) _holdZ = value;
+		}
+		
+		/**
+		 * Called when the camera should start shaking
+		 * @param	e
+		 */
+		private function _onShake(e:Event):void
+		{
+			//Get intensity
+			if (e.data.intensity != null)
+			{
+				if(e.data.intensity > _shakeIntensity) _shakeIntensity = e.data.intensity;
+			}
+			else
+			{
+				_shakeIntensity = 10;
+			}
+			
+			//Get decay
+			if (e.data.intensity != null)
+			{
+				_shakeDecay = e.data.decay;
+			}
+			else
+			{
+				_shakeDecay = 1.25;
+			}
+			
+			//Set temporary x/y
+			if (_shakeIntensity == 0)
+			{
+				_tempX = _x;
+				_tempY = _y;
+			}
 		}
 		
 	}

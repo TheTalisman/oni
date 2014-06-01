@@ -29,7 +29,11 @@ package oni.entities.environment
 	 */
 	public class FluidBody extends PhysicsEntity
 	{
+		private const _splashDampening:Number = 0.5;
+		
 		private const _spread:Number = 0.25;
+		
+		private const _waveQuality:Number = 1;
 		
 		/**
 		 * The triangle strip to draw the columns to
@@ -59,11 +63,8 @@ package oni.entities.environment
 		public function FluidBody(params:Object) 
 		{
 			//Default parameters
-			if (params.waveQuality == null) params.waveQuality = 1;
 			if (params.density == null) params.density = 3;
 			if (params.viscosity == null) params.viscosity = 5;
-			if (params.splashDampening == null) params.splashDampening = 0.5;
-			if (params.yOffset == null) params.yOffset = 256;
 			if (params.topColor == null) params.topColor = 0x6FA8FF;
 			if (params.bottomColor == null) params.bottomColor = 0x000F28;
 			
@@ -75,9 +76,10 @@ package oni.entities.environment
 			this.cull = false;
 			
 			//Calculate the amount of columns
-			_columnAmount = _params.width / params.waveQuality;
+			_columnAmount = _params.width / _waveQuality;
 			
-			if (Platform.isDesktop())
+			//Check if the platform supports advanced features
+			if (Platform.supportsAdvancedFeatures())
 			{
 				//Create a columns vector
 				_fluidColumns = new Vector.<Object>();
@@ -90,20 +92,23 @@ package oni.entities.environment
 				_triangleStrip = new TriangleStrip();
 				
 				//Create a render texture to draw to
-				_renderTexture = new RenderTexture(_params.width, _params.height + _params.yOffset, false);
+				_renderTexture = new RenderTexture(_params.width, _params.height + 256, false);
 				
 				//Create a render matrix
 				_renderMatrix = new Matrix();
-				MatrixUtil.prependTranslation(_renderMatrix, 0, _params.yOffset);
+				MatrixUtil.prependTranslation(_renderMatrix, 0, 256);
 				
 				//Create an image to render the water
 				_displayObject = new Image(_renderTexture);
-				_displayObject.y = -_params.yOffset;
+				_displayObject.y = -256;
 				_displayObject.scaleX = _params.width / _columnAmount;
 				addChild(_displayObject);
 				
 				//Listen for update
 				addEventListener(Oni.UPDATE, _onUpdate);
+				
+				//Listen for physics interaction
+				addEventListener(Oni.PHYSICS_INTERACTION, _onPhysicsInteraction);
 				
 				//Reset the column vector and repopulate
 				/*if (_fluidColumns != null)
@@ -125,9 +130,6 @@ package oni.entities.environment
 				(_displayObject as Fill).addVertex(0, _params.height,  _params.bottomColor);
 				addChild(_displayObject);
 			}
-			
-			//Listen for physics interaction
-			addEventListener(Oni.PHYSICS_INTERACTION, _onPhysicsInteraction);
 			
 			//Set blendmode
 			this.blendMode = BlendMode.MULTIPLY;
@@ -203,7 +205,7 @@ package oni.entities.environment
 				var maxIndex:int = int(Math.max(0, Math.min(_fluidColumns.length - 1, ((collider.x + (collider.width-collider.pivotX)) - this.x) / _displayObject.scaleX)));
 				
 				//Calculate the speed
-				var speed:Number = (collider.body.velocity.y * _params.splashDampening) * (maxIndex - minIndex) / 1000;
+				var speed:Number = (collider.body.velocity.y * _splashDampening) * (maxIndex - minIndex) / 1000;
 					
 				//Gotta go fast, make a splash!
 				for (var i:uint = minIndex; i < maxIndex; i++)

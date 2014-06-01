@@ -6,8 +6,11 @@ package oni.entities.platformer
 	import nape.callbacks.InteractionCallback;
 	import nape.callbacks.InteractionListener;
 	import nape.callbacks.InteractionType;
+	import nape.geom.Ray;
+	import nape.geom.RayResult;
 	import nape.phys.Material;
 	import nape.shape.Polygon;
+	import oni.assets.AssetManager;
 	import oni.entities.Entity;
 	import oni.entities.PhysicsEntity;
 	import oni.Oni;
@@ -16,6 +19,7 @@ package oni.entities.platformer
 	import nape.phys.BodyType;
 	import nape.shape.Circle;
 	import nape.space.Space;
+	import starling.display.Image;
 	import starling.display.Shape;
 	import starling.events.Event;
 	/**
@@ -24,55 +28,66 @@ package oni.entities.platformer
 	 */
 	public class Character extends PhysicsEntity
 	{
-		public var jumpHeight:Number = 340;
+		private var _state:String;
 		
-		public var jumpAcceleration:Number = 10;
+		protected  var _material:Material;
 		
-		public var acceleration:Number = 30;
+		protected  var _moveDirection:int;
 		
-		public var maxVelocity:Number = 240;
+		protected  var _isJumping:Boolean;
 		
-		private var _shape:Shape;
+		protected var _floorCheckRay:Ray;
 		
-		private var _bodyWidth:int;
-		
-		private var _bodyHeight:int;
-		
-		private var _material:Material;
-		
-		private var _footSensor:Polygon;
-		
-		private var _onGround:Boolean;
-		
-		private var _moveDirection:int;
-		
-		private var _isJumping:Boolean;
+		private var _fallTimer:uint=0;
 		
 		public function Character(params:Object)
 		{
+			//Default parameters
+			if (params.acceleration == null) params.acceleration = 30;
+			if (params.maxVelocity == null) params.maxVelocity = 50;
+			
 			//Super
 			super(params);
 			
-			//Set dimensions
-			_bodyWidth = params.bodyWidth;
-			_bodyHeight = params.bodyHeight;
-			
-			//Create a shape for graphics
-			_shape = new Shape();
-			_shape.graphics.beginFill(0x000000);
-			_shape.graphics.lineStyle(1, 0xFFFFFF);
-			_shape.graphics.drawRect(0, 0, _bodyWidth, _bodyHeight);
-			_shape.graphics.endFill();
-			addChild(_shape);
-			
 			//Set cull bounds
-			cullBounds.setTo(0, 0, _bodyWidth, _bodyHeight);
-			
-			//Listen for physics interaction
-			addEventListener(Oni.PHYSICS_INTERACTION, _onPhysicsInteraction);
+			cullBounds.setTo(0, 0, _params.bodyWidth, _params.bodyHeight);
 			
 			//Listen for update
 			addEventListener(Oni.UPDATE, _onUpdate);
+			
+			//Create a floor check ray
+			_floorCheckRay = new Ray(Vec2.weak(), new Vec2(0, 1));
+			_floorCheckRay.maxDistance = 100;
+			
+			//Listen for debug draw
+			addEventListener(Oni.DEBUG_DRAW, _onDebugDraw);
+			
+			//Set state to idle
+			state = "idle";
+		}
+		
+		private function _onDebugDraw(e:Event):void
+		{
+			//Draw floor check ray
+			_floorCheckRay.origin.set(Vec2.weak(this.x+_params.bodyWidth/2, this.y + _params.bodyHeight));
+			
+				var rayResult:RayResult = _physicsBody.space.rayCast(_floorCheckRay);
+				if (rayResult != null)
+				{
+					var collision:Vec2 = _floorCheckRay.at(rayResult.distance);
+					e.data.debug.drawLine(_floorCheckRay.origin, collision, 0xaa00);
+					// Draw circle at collision point, and collision normal.
+					e.data.debug.drawFilledCircle(collision, 3, 0xaa0000);
+					e.data.debug.drawLine(
+						collision,
+						collision.addMul(rayResult.normal, 15, true),
+						0xaa0000
+					);
+					collision.dispose();
+	 
+					// release rayResult object to pool.
+					rayResult.dispose();
+				}
 		}
 		
 		override protected function _createBody():void 
@@ -86,19 +101,14 @@ package oni.entities.platformer
 			//Create a body shape
 			var angle:int = 4;
 			_physicsBody.shapes.add(new Polygon([new Vec2(0, 0),
-												 new Vec2(_bodyWidth, 0),
-												 new Vec2(_bodyWidth, _bodyHeight-angle),
-												 //new Vec2(_bodyWidth-(angle/4), _bodyHeight-(angle/2)),
-												 new Vec2(_bodyWidth-angle, _bodyHeight),
-												 new Vec2(angle, _bodyHeight),
-												 //new Vec2((angle/4), _bodyHeight-(angle/2)),
-												 new Vec2(0, _bodyHeight - angle),
+												 new Vec2(_params.bodyWidth, 0),
+												 new Vec2(_params.bodyWidth, _params.bodyHeight-angle),
+												 //new Vec2(_params.bodyWidth-(angle/4), _params.bodyHeight-(angle/2)),
+												 new Vec2(_params.bodyWidth-angle, _params.bodyHeight),
+												 new Vec2(angle, _params.bodyHeight),
+												 //new Vec2((angle/4), _params.bodyHeight-(angle/2)),
+												 new Vec2(0, _params.bodyHeight - angle),
 												 new Vec2(0, 0)], _material));
-			
-			//Create a foot sensor
-			_footSensor = new Polygon(Polygon.rect(2, _bodyHeight-2, _bodyWidth-4, 8));
-			_footSensor.sensorEnabled = true;
-			_physicsBody.shapes.add(_footSensor);
 			
 			//Don't allow rotation
 			_physicsBody.allowRotation = false;
@@ -107,61 +117,110 @@ package oni.entities.platformer
 			_physicsBody.space = _space;
 		}
 		
-		private function _onPhysicsInteraction(e:Event):void
-		{
-			//Sensor interaction
-			if (e.data.type == InteractionType.SENSOR)
-			{
-				//Set on ground
-				_onGround = (e.data.event == CbEvent.BEGIN);
-				if (_onGround) _isJumping = false;
-			}
-		}
-		
 		public function jump():void
 		{
 			//Only jump is we're on ground
-			if (_onGround)
+			if (onGround)
 			{
-				velocity.y = -jumpHeight;
+				velocity.y = -_params.jumpHeight;
 				_isJumping = true;
 			}
 		}
 		
-		public function stopJumping():void
+		public function get isJumping():Boolean
 		{
-			_isJumping = false;
+			return !onGround && _isJumping;
 		}
 		
-		private function _onUpdate(e:Event):void
+		public function set isJumping(value:Boolean):void
 		{
-			//Are we jumping?
-			if (_isJumping && velocity.y < 0)
+			_isJumping = value;
+		}
+		
+		protected function _onUpdate(e:Event):void
+		{
+			if (state != "dead")
 			{
-				velocity.y -= jumpAcceleration;
-			}
-			
-			//Check if moving
-			if (_moveDirection != 0)
-			{
-				//Accelerate
-				if (!(velocity.x < -maxVelocity || velocity.x > maxVelocity))
+				//Are we jumping?
+				if (isJumping && velocity.y < 0)
 				{
-					velocity.x += _moveDirection * acceleration;
+					state = "jumping";
+					velocity.y -= _params.jumpAcceleration;
 				}
+				else if(velocity.y > 120) //We're falling!
+				{
+					_isJumping = false;
+					
+					//Set origin
+					_floorCheckRay.origin.set(Vec2.weak(this.x+_params.bodyWidth/2, this.y + _params.bodyHeight));
+				
+					var rayResult:RayResult = _physicsBody.space.rayCast(_floorCheckRay);
+					if (rayResult != null)
+					{
+						if (state == "landing")
+						{
+							state = "idle";
+						}
+						else
+						{
+							_fallTimer = 0;
+							state = "landing";
+						}
+						
+						rayResult.dispose();
+					}
+					else
+					{
+						state = "falling";
+						_fallTimer++;
+						if (_fallTimer > 60)
+						{
+							state = "falltodeath";
+							_fallTimer = 0;
+						}
+					}
+				}
+				else if (state == "idle" || state == "moving") //Check if we are moving or idle
+				{
+					if (velocity.x > 0.75 || velocity.x < -0.75)
+					{
+						state = "moving";
+					}
+					else
+					{
+						state = "idle";
+						_moveDirection = 0;
+					}
+				}
+				
+					//Check move direction for acceleration
+					if (_moveDirection != 0)
+					{
+						//Are we under the velocity limit?
+						if (!(velocity.x < -_params.maxVelocity || velocity.x > _params.maxVelocity))
+						{
+							//Accelerate
+							velocity.x += _moveDirection * _params.acceleration;
+						}
+						else
+						{
+							if (_moveDirection == 1) velocity.x = _params.maxVelocity;
+							if (_moveDirection == -1) velocity.x = -_params.maxVelocity;
+						}
+					}
 			}
 		}
 		
 		public function move(direction:int):void
 		{
 			//Check if different
-			if (direction != _moveDirection)
+			if (canMove && direction != _moveDirection)
 			{
 				//Set direction
 				_moveDirection = direction;
 				
 				//Reset velocity
-				velocity.x = _moveDirection * acceleration;
+				velocity.x = _moveDirection * _params.acceleration;
 				
 				//Clear friction
 				friction = 0;
@@ -176,14 +235,14 @@ package oni.entities.platformer
 			_moveDirection = 0;
 		}
 		
-		public function get footSensor():Polygon
-		{
-			return _footSensor;
-		}
-		
 		public function get onGround():Boolean
 		{
-			return _onGround;
+			return velocity.y > -1.5 && velocity.y < 1.5;
+		}
+		
+		public function get canMove():Boolean
+		{
+			return true;
 		}
 		
 		public function get friction():Number
@@ -209,6 +268,34 @@ package oni.entities.platformer
 		override public function set rotation(value:Number):void 
 		{
 			//Don't allow rotation
+		}
+		
+		public function get isMoving():Boolean
+		{
+			return velocity.x != 0;
+		}
+		
+		public function get canJump():Boolean
+		{
+			return onGround;
+		}
+		
+		public function get state():String
+		{
+			return _state;
+		}
+		
+		public function set state(value:String):void
+		{
+			//Check if different
+			if (_state != value)
+			{
+				//Set state
+				_state = value;
+				
+				//Dispatch changed event
+				dispatchEventWith(Oni.UPDATE_DATA, false, { state: value });
+			}
 		}
 		
 	}

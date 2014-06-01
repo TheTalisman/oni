@@ -1,5 +1,6 @@
 package oni
 {
+	import flash.system.System;
 	import oni.assets.AssetManager;
 	import oni.components.ComponentManager;
 	import oni.entities.Entity;
@@ -26,6 +27,11 @@ package oni
 	 */
 	public class Oni extends Sprite
 	{
+		/**
+		 * Event fired for drawing debug data
+		 */
+		public static const DEBUG_DRAW:String = "debugdraw";
+		
 		/**
 		 * Event fired when the current level has been completed
 		 */
@@ -133,36 +139,31 @@ package oni
 			removeEventListener(Event.ADDED_TO_STAGE, _init);
 			
 			//Create a component manager
-			components = new ComponentManager();
+			components = new ComponentManager(this);
 			
 			//Create a screen manager
 			screens = new ScreenManager(this);
 			components.add(screens);
 			
-			//Listen for update
-			addEventListener(EnterFrameEvent.ENTER_FRAME, _enterFrame);
-			
 			//Dispatch init event
 			dispatchEventWith(Oni.INIT);
+			
+			//Listen for frame update
+			addEventListener(Event.ENTER_FRAME, _onEnterFrame);
+			
+            //Do a quick clean up
+            System.pauseForGCIfCollectionImminent(0);
+            System.gc();
 		}
 		
 		/**
-		 * Called every frame, handles updating
+		 * Called every frame
 		 * @param	e
 		 */
-		private function _enterFrame(e:EnterFrameEvent):void
+		private function _onEnterFrame(e:Event):void
 		{
-			//Create update event
-			var update:Event = new Event(Oni.UPDATE, false, { engine:this, time: e.passedTime } );
-			
 			//Dispatch update event
-			dispatchEvent(update);
-			
-			//Update components
-			components.dispatchEvent(update);
-			
-			//Nullify!
-			update = null;
+			dispatchEventWith(Oni.UPDATE, false);
 		}
 	}
 }

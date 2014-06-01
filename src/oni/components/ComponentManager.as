@@ -1,6 +1,5 @@
 package oni.components 
 {
-	import oni.components.weather.WeatherSystem;
 	import oni.core.ISerializable;
 	import oni.entities.EntityManager;
 	import oni.Oni;
@@ -13,25 +12,28 @@ package oni.components
 	public class ComponentManager extends EventDispatcher implements ISerializable
 	{
 		/**
-		 * Linkage classes so we don't get the "Variable [X] is not defined error"
-		 */
-		private static var weatherSystem:WeatherSystem;
-		
-		/**
 		 * The components vector
 		 */
 		public var components:Vector.<EventDispatcher>;
 		
 		/**
+		 * The current engine instance
+		 */
+		private var _oni:Oni;
+		
+		/**
 		 * Initialises a new component manager
 		 */
-		public function ComponentManager() 
+		public function ComponentManager(oni:Oni) 
 		{
+			//Set engine instance
+			_oni = oni;
+			
 			//Create a components vector
 			components = new Vector.<EventDispatcher>();
 			
-			//Listen for events to relay
-			addEventListener(Oni.UPDATE, _relayEvent);
+			//Listen for update
+			_oni.addEventListener(Oni.UPDATE, _onUpdate);
 		}
 		
 		/**
@@ -87,16 +89,13 @@ package oni.components
 		}
 		
 		/**
-		 * Relays an event to every component
+		 * Called when the engine updates
 		 * @param	e
 		 */
-		private function _relayEvent(e:Event):void
+		private function _onUpdate(e:Event):void
 		{
 			//Relay event to all components
-			for (var i:uint = 0; i < components.length; i++)
-			{
-				components[i].dispatchEvent(e);
-			}
+			for (var i:int = 0; i < components.length; i++) components[i].dispatchEvent(e);
 		}
 		
 		/**

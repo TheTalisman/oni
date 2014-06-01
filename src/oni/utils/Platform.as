@@ -68,9 +68,39 @@ package oni.utils
 		 */
 		public static function isDesktop():Boolean
 		{
-			return Capabilities.playerType == "Desktop";
+			return !isMobile() &&
+				   Capabilities.playerType == "Desktop" ||
+				   Capabilities.playerType == "StandAlone" ||
+				   Capabilities.playerType == "External";
 		}
 
+		/**
+		 * Checks if the engine is running on a web plugin
+		 * @return
+		 */
+		public static function isWeb():Boolean
+		{
+			return Capabilities.playerType == "PlugIn";
+		}
+		
+		/**
+		 * Checks if the platform can support advanced features such as fragment shaders
+		 * @return
+		 */
+		public static function supportsAdvancedFeatures():Boolean
+		{
+			return !isWeb() && !isMobile();
+		}
+		
+		/**
+		 * Checks if the platform supports lighting
+		 * @return
+		 */
+		public static function supportsLighting():Boolean
+		{
+			return !isMobile();
+		}
+		
 		/**
 		 * Checks if the platform the engine is running is capable of debug mode
 		 * @return

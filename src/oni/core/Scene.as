@@ -1,6 +1,7 @@
 package oni.core 
 {
 	import flash.display.Bitmap;
+	import flash.geom.Matrix;
 	import flash.geom.Point;
 	import flash.utils.getDefinitionByName;
 	import oni.assets.AssetManager;
@@ -11,19 +12,27 @@ package oni.core
 	import oni.entities.environment.FluidBody;
 	import oni.entities.lights.Light;
 	import oni.Oni;
+	import oni.utils.OniMath;
 	import oni.utils.Platform;
 	import starling.core.RenderSupport;
 	import starling.core.Starling;
+	import starling.display.BlendMode;
 	import starling.display.DisplayObject;
 	import starling.display.DisplayObjectContainer;
+	import starling.display.Image;
+	import starling.display.Quad;
 	import starling.events.Event;
+	import starling.filters.BlurFilter;
 	import starling.filters.ColorMatrixFilter;
+	import starling.textures.RenderTexture;
+	import starling.textures.Texture;
+	import starling.utils.MatrixUtil;
 	/**
 	 * ...
 	 * @author Sam Hellawell
 	 */
 	public class Scene extends DisplayObjectContainer
-	{		   
+	{
 		/**
 		 * Whether we should depth sort the scene or not
 		 */
@@ -40,73 +49,98 @@ package oni.core
 		protected var _lightMap:LightMap;
 		
 		/**
-		 * The scene's hue, values range between -1 and 1
+		 * A coloured background quad
 		 */
-		protected var _hue:Number;
+		private var _backQuad:Quad;
 		
 		/**
-		 * The scene's saturation, values range between -1 and 1
+		 * A texture to render the light map to
 		 */
-		protected var _saturation:Number;
+		private var _lightRenderTexture:RenderTexture;
 		
 		/**
-		 * The scene's brightness, values range between -1 and 1
+		 * The matrix for light quality scaling
 		 */
-		protected var _brightness:Number;
+		private var _lightRenderMatrix:Matrix;
 		
-		/**
-		 * The scene's contrast, values range between -1 and 1
-		 */
-		protected var _contrast:Number;
-		
-		/**
-		 * The scene's color filter
-		 */
-		private var _colorFilter:ColorMatrixFilter;
-		
-		public function Scene(lighting:Boolean=true, effects:Boolean=true)
+		public function Scene(lighting:Boolean = true, background:uint = 0)
 		{
 			//Create a diffuse map
 			_diffuseMap = new DisplayMap();
-			addChild(_diffuseMap);
 			
-			//Is lighting enabled?
-			if (lighting)
+			//Create a render matrix
+			_lightRenderMatrix = new Matrix();
+			
+			//Disable lighting?
+			if (!Platform.supportsLighting()) lighting = false;
+			
+			//Set light quality
+			var lightQuality:Number = 1;
+			if (Platform.isMobile() || Platform.supportsAdvancedFeatures()) //Scale down on mobile devices
+			{
+				lightQuality = 0.5;
+			}
+			
+ 			//Add a background quad
+ 			if (background != 0)
+ 			{
+				_backQuad = new Quad(Platform.STAGE_WIDTH, Platform.STAGE_HEIGHT, background);
+ 				_diffuseMap.addChild(_backQuad);
+ 			}
+			
+			//Create render quad
+			addChild(new Quad(Platform.STAGE_WIDTH, Platform.STAGE_HEIGHT, 0x0));
+			
+			//Do we support lighting?
+			if (lighting && Platform.supportsLighting())
 			{
 				//Create a light map
 				_lightMap = new LightMap();
-				addChild(_lightMap);
+				_lightMap.addEventListener(Oni.UPDATE_DATA, _onAmbientLightUpdated);
+				_lightMap.scaleX = _lightMap.scaleY = lightQuality;
+					
+				//Create a composite filter
+				this.filter = new CompositeFilter();
+					
+				//Create a render texture for the diffuse map
+				(this.filter as CompositeFilter).diffuseTexture = new RenderTexture(Platform.STAGE_WIDTH, Platform.STAGE_HEIGHT);
+					
+				//Create a render texture for the light map
+				(this.filter as CompositeFilter).lightTexture = _lightRenderTexture = new RenderTexture(Platform.STAGE_WIDTH * lightQuality, Platform.STAGE_HEIGHT * lightQuality);
+					
+				//Set light quality
+				MatrixUtil.prependScale(_lightRenderMatrix, lightQuality, lightQuality);
+			}
+			else //No lighting, just add diffuse map
+			{
+				addChild(_diffuseMap);
 			}
 			
-			//Create a color filter
-			_colorFilter = new ColorMatrixFilter();
-			if (effects) filter = _colorFilter;
+			//Untouchable
+			this.touchable = false;
 			
 			//Listen for events
 			addEventListener(Oni.UPDATE_POSITION, _updatePosition);
 		}
 		
-		public function get effectsEnabled():Boolean
+		private function _onAmbientLightUpdated(e:Event):void
 		{
-			return filter != null;
-		}
-		
-		public function set effectsEnabled(value:Boolean):void
-		{
-			//Check to apply filter or not
-			if (filter == null)
+			//Update ambient colour
+			if (filter != null)
 			{
-				filter = _colorFilter;
-			}
-			else
-			{
-				filter = null;
+				//Set ambient colour
+				(filter as CompositeFilter).ambientColor = OniMath.lerp32(0x0, e.data.color, e.data.intensity);
 			}
 		}
 		
-		public function get lighting():LightMap
+		public function get lightMap():LightMap
 		{
 			return _lightMap;
+		}
+		
+		public function get diffuseMap():DisplayMap
+		{
+			return _diffuseMap;
 		}
 		
 		override public function render(support:RenderSupport, parentAlpha:Number):void 
@@ -135,6 +169,21 @@ package oni.core
 					return ydif;
 				});
 			}
+				
+			//Draw light map
+			if (_lightRenderTexture != null)
+			{
+				_lightRenderTexture.clear();
+				_lightRenderTexture.draw(_lightMap, _lightRenderMatrix);
+			}
+			
+			//Check if we're using a filter or not
+			if (this.filter != null)
+			{
+				//Draw diffuse map
+				((this.filter as CompositeFilter).diffuseTexture as RenderTexture).clear();
+				((this.filter as CompositeFilter).diffuseTexture as RenderTexture).draw(_diffuseMap, _diffuseMap.transformationMatrix);
+			}
 			
 			//Render
 			super.render(support, parentAlpha);
@@ -144,7 +193,7 @@ package oni.core
 		{
 			//Position maps
 			_diffuseMap.reposition(e.data.x, e.data.y, e.data.z);
-			if(_lightMap != null) _lightMap.reposition(e.data.x, e.data.y, e.data.z);
+			if (_lightMap != null) _lightMap.reposition(e.data.x, e.data.y, e.data.z);
 		}
 		
 		public function getContainer(child:DisplayObject):DisplayObjectContainer
@@ -187,131 +236,22 @@ package oni.core
 			super.dispose();
 		}
 		
-		public function serialize(entities:EntityManager, components:ComponentManager):Object
+		public function serialize(entities:EntityManager = null, components:ComponentManager = null):Object
 		{
-			return { lighting: lighting != null,
+			return { name: name,
+					 background: (_backQuad != null) ? _backQuad.color : 0,
+					 lighting: lightMap != null,
 					 physicsEnabled: entities.physicsEnabled,
 					 gravity: entities.gravity,
-					 entities: entities.serialize(),
-					 components: components.serialize() };
-		}
-		
-		/**
-		 * The scene's brightness, values range between -1 and 1
-		 */
-		public function get brightness():Number
-		{
-			return _brightness;
-		}
-		
-		/**
-		 * The scene's brightness, values range between -1 and 1
-		 */
-		public function set brightness(value:Number):void
-		{
-			//Only adjust if different
-			if (value != _brightness)
-			{
-				//Get difference
-				var diff:Number = value - _brightness;
-				if (isNaN(diff)) diff = value;
-				
-				//Set value
-				_brightness = value;
-				
-				//Adjust
-				_colorFilter.adjustBrightness(diff);
-			}
-		}
-		
-		/**
-		 * The scene's contrast, values range between -1 and 1
-		 */
-		public function get contrast():Number
-		{
-			return _contrast;
-		}
-		
-		/**
-		 * The scene's contrast, values range between -1 and 1
-		 */
-		public function set contrast(value:Number):void
-		{
-			//Only adjust if different
-			if (value != _contrast)
-			{
-				//Get difference
-				var diff:Number = value - _contrast;
-				if (isNaN(diff)) diff = value;
-				
-				//Set value
-				_contrast = value;
-				
-				//Adjust
-				_colorFilter.adjustBrightness(diff);
-			}
-		}
-		
-		/**
-		 * The scene's saturation, values range between -1 and 1
-		 */
-		public function get saturation():Number
-		{
-			return _saturation;
-		}
-		
-		/**
-		 * The scene's saturation, values range between -1 and 1
-		 */
-		public function set saturation(value:Number):void
-		{
-			//Only adjust if different
-			if (value != _saturation)
-			{
-				//Get difference
-				var diff:Number = value - _saturation;
-				if (isNaN(diff)) diff = value;
-				
-				//Set value
-				_saturation = value;
-				
-				//Adjust
-				_colorFilter.adjustSaturation(diff);
-			}
-		}
-		
-		/**
-		 * The scene's hue, values range between -1 and 1
-		 */
-		public function get hue():Number
-		{
-			return _hue;
-		}
-		
-		/**
-		 * The scene's hue, values range between -1 and 1
-		 */
-		public function set hue(value:Number):void
-		{
-			//Only adjust if different
-			if (value != _hue)
-			{
-				//Get difference
-				var diff:Number = value - _hue;
-				if (isNaN(diff)) diff = value;
-				
-				//Set value
-				_hue = value;
-				
-				//Adjust
-				_colorFilter.adjustHue(diff);
-			}
+					 entities: (entities != null) ? entities.serialize() : null,
+					 components: (components != null) ? components.serialize() : null };
 		}
 		
 		public static function deserialize(data:Object, entities:EntityManager, components:ComponentManager):Scene
 		{
 			//Create a scene
-			var scene:Scene = new Scene(data.lighting);
+			var scene:Scene = new Scene(data.lighting, data.background);
+			scene.name = data.name;
 			
 			//Add the entities
 			var i:uint;

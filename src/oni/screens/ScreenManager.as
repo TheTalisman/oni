@@ -11,11 +11,6 @@ package oni.screens
 	public class ScreenManager extends EventDispatcher
 	{
 		/**
-		 * The index for the game screen
-		 */
-		public static var SCREEN_GAME:int;
-		
-		/**
 		 * The current engine instance
 		 */
 		private var _oni:Oni;
@@ -52,14 +47,6 @@ package oni.screens
 			//Check its not in array
 			if (_screens.indexOf(screen) < 0)
 			{
-				//Set index
-				switch(screen.name)
-				{
-					case "game":
-						SCREEN_GAME = _screens.length;
-						break;
-				}
-				
 				//Add to array
 				_screens.push(screen);
 			
@@ -108,7 +95,6 @@ package oni.screens
 						else if(i != index && _screens[i].overlay)
 						{
 							//Remove from parent
-							trace("swag " + i + " " + _screens[i].name);
 							//_screens[i].parent.removeChild(_screens[i]);
 							_screens[i].remove();
 							_screens[i].visible = false;

@@ -14,6 +14,7 @@ package oni.entities
 	import nape.geom.Vec2;
 	import nape.phys.Body;
 	import nape.space.Space;
+	import oni.Startup;
 	import starling.core.Starling;
 	import starling.events.Event;
 	import starling.events.EventDispatcher;
@@ -32,7 +33,7 @@ package oni.entities
 		/**
 		 * A list of current entities
 		 */
-		public var entities:Vector.<Entity>;
+		private var _entities:Vector.<Entity>;
 		
 		/**
 		 * The physics space
@@ -44,6 +45,9 @@ package oni.entities
 		 */
 		private var _paused:Boolean;
 		
+		/**
+		 * Nape physics debug display
+		 */
 		private var _napeDebug:ShapeDebug;
 		
 		/**
@@ -54,7 +58,7 @@ package oni.entities
 		public function EntityManager(physics:Boolean=true, gravity:Point=null) 
 		{
 			//Create an entities vector
-			entities = new Vector.<Entity>();
+			_entities = new Vector.<Entity>();
 			
 			//Setup physics
 			if (physics) setupPhysics(gravity);
@@ -100,7 +104,6 @@ package oni.entities
 				_napeDebug = new ShapeDebug(Starling.current.stage.stageWidth, Starling.current.stage.stageHeight, 0xFFFFFF);
 				_napeDebug.display.scaleX = Starling.current.nativeStage.stageWidth / Starling.current.stage.stageWidth;
 				_napeDebug.display.scaleY = Starling.current.nativeStage.stageHeight / Starling.current.stage.stageHeight;
-				//Starling.current.nativeStage.addChild(_napeDebug.display);
 			}
 		}
 		
@@ -193,33 +196,36 @@ package oni.entities
 			//Only if not paused
 			if (!_paused)
 			{
+				//Fire update event
+				var i:uint;
+				for (i = 0; i < _entities.length; i++) 
+				{
+					_entities[i].dispatchEvent(e);
+				}
+				
 				//Check if we should update physics
 				if (_space != null) 
 				{
 					//Step physics time
 					_space.step(TIME_STEP);
 					
-					//Redraw debug view
-					_napeDebug.clear();
-					_napeDebug.draw(_space);
-					_napeDebug.flush();
+					//Debug drawing
+					if (_napeDebug != null && _napeDebug.display.parent != null)
+					{
+						//Redraw debug view
+						_napeDebug.clear();
+						_napeDebug.draw(_space);
+						
+						//Dispatch debug draw event
+						for (i = 0; i < _entities.length; i++) 
+						{
+							_entities[i].dispatchEventWith(Oni.DEBUG_DRAW, false, { debug: _napeDebug });
+						}
+						
+						//Flush the debug
+						_napeDebug.flush();
+					}
 				}
-				
-				//Relay
-				_relayEvent(e);
-			}
-		}
-		
-		/**
-		 * Relays an event to all entities
-		 * @param	e
-		 */
-		private function _relayEvent(e:Event):void
-		{
-			//Relay event to all entities
-			for (var i:uint = 0; i < entities.length; i++)
-			{
-				entities[i].dispatchEvent(e);
 			}
 		}
 		
@@ -232,13 +238,13 @@ package oni.entities
 		public function add(entity:Entity, silent:Boolean=false):Entity
 		{
 			//Dispatch added event
-			entity.dispatchEventWith(Oni.ENTITY_ADDED, false, { space: _space } );
+			entity.dispatchEventWith(Oni.ENTITY_ADDED, false, { space: _space, manager: this } );
 			
 			//Add to list
-			entities.push(entity);
+			_entities.push(entity);
 			
 			//Dispatch event
-			if(!silent) dispatchEventWith(Oni.ENTITY_ADDED, false, { entity:entity } );
+			if (!silent) dispatchEventWith(Oni.ENTITY_ADDED, false, { entity: entity } );
 			
 			//Return
 			return entity;
@@ -252,14 +258,19 @@ package oni.entities
 		 */
 		public function remove(entity:Entity, silent:Boolean=false):void
 		{
-			//Dispatch removed event
-			entity.dispatchEventWith(Oni.ENTITY_REMOVED);
-			
 			//Remove
-			entities.splice(entities.indexOf(entity), 1);
-			
-			//Dispatch event
-			if(!silent) dispatchEventWith(Oni.ENTITY_REMOVED, false, { entity:entity } );
+			_entities.splice(_entities.indexOf(entity), 1);
+			if (entity != null)
+			{
+				//Remove from parent
+				if (entity.parent != null) entity.removeFromParent(false);
+				
+				//Dispatch removed event
+				entity.dispatchEventWith(Oni.ENTITY_REMOVED);
+				
+				//Dispatch event
+				if (!silent) dispatchEventWith(Oni.ENTITY_REMOVED, false, { entity: entity } );
+			}
 		}
 		
 		/**
@@ -269,7 +280,10 @@ package oni.entities
 		public function removeAll(silent:Boolean=false):void
 		{
 			//Remove all entities
-			for (var i:int = 0; i < entities.length; i++) remove(entities[i], silent);
+			while (_entities.length > 0)
+			{
+				remove(_entities[0], silent);
+			}
 		}
 		
 		/**
@@ -279,7 +293,7 @@ package oni.entities
 		 */
 		public function get(index:int):Entity
 		{
-			return entities[index];
+			return _entities[index];
 		}
 		
 		/**
@@ -316,17 +330,50 @@ package oni.entities
 		}
 		
 		/**
+		 * The amount of entities in the scene
+		 */
+		public function get length():int
+		{
+			return _entities.length;
+		}
+		
+		/**
 		 * Serializes data to an object
 		 * @return
 		 */
 		public function serialize():Object
 		{
 			var data:Array = new Array();
-			for (var i:uint = 0; i < entities.length; i++)
+			for (var i:uint = 0; i < _entities.length; i++)
 			{
-				data.push(entities[i].serialize());
+				if(_entities[i].serializable) data.push(_entities[i].serialize());
 			}
 			return data;
+		}
+		
+		/**Boolean
+		 */
+		public function get debug():Boolean
+		{
+			return _napeDebug != null && _napeDebug.display.parent != null;
+		}
+		
+		/**
+		 * Debug on/off
+		 */
+		public function set debug(value:Boolean):void
+		{
+			if (_napeDebug != null)
+			{
+				if (value)
+				{
+					Starling.current.nativeStage.addChild(_napeDebug.display);
+				}
+				else if (_napeDebug.display.parent != null)
+				{
+					Starling.current.nativeStage.removeChild(_napeDebug.display);
+				}
+			}
 		}
 		
 	}
